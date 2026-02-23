@@ -55,25 +55,21 @@ A custom Home Assistant integration that monitors Minecraft Java servers, automa
 The Lovelace resource is **automatically registered** when the integration loads. Just add the card:
 
 1. Open your Dashboard → **Edit** (pencil icon)
-2. **Add Card → Manual**
-3. Enter:
+2. **Add Card** → search for **"Minecraft Server Stats"**
+3. Done! The card **automatically finds all configured servers** and displays them.
 
-```yaml
-type: custom:mc-server-stats-card
-```
-
-That's it! The card **automatically finds all configured Minecraft servers** and displays them. You can also configure it via the **visual editor** (pencil icon on the card).
+All settings can be configured via the **visual editor** – click the pencil icon on the card to open it.
 
 ### Card Options
 
 | Option | Default | Description |
 |---|---|---|
-| `rotate_interval` | `8` | Seconds between server rotation (0 = disabled) |
-| `show_header` | `true` | Display Minecraft icon and title at the top |
-| `show_offline` | `false` | Include offline servers in rotation |
-| `exclude_servers` | `[]` | List of server names to hide |
+| **Show header** | `on` | Display Minecraft icon and title at the top |
+| **Show offline servers** | `off` | Include servers that are currently offline |
+| **Rotation interval** | `8` | Seconds between server rotation (0 = disabled) |
+| **Server toggles** | all `on` | Enable/disable individual servers from the card |
 
-All options can be configured via the **visual editor** – no YAML needed!
+All options are available in the visual editor – no YAML needed!
 
 ---
 
