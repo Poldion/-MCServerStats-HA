@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Minecraft Server hinzufügen",
+        "description": "Gib die IP-Adresse oder den Hostnamen ein, um nach Minecraft-Servern zu suchen.",
+        "data": {
+          "host": "IP-Adresse oder Hostname",
+          "scan_interval": "Status-Aktualisierungsintervall (Sekunden)",
+          "discovery_interval": "Erkennungs-Scan-Intervall (Sekunden)",
+          "port_min": "Portbereich Start",
+          "port_max": "Portbereich Ende"
+        }
+      },
+      "select_servers": {
+        "title": "Server einrichten",
+        "description": "{count} Server auf {host} gefunden. Gib jedem Server einen Namen oder lösche das Feld, um ihn zu überspringen.",
+        "data": {}
+      },
+      "discovery_confirm": {
+        "title": "Neuer Minecraft Server entdeckt",
+        "description": "Ein neuer Minecraft Server wurde auf {host}:{port} gefunden.",
+        "data": {
+          "server_name": "Servername"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kein Minecraft-Server unter dieser Adresse erreichbar.",
+      "no_servers_selected": "Du musst mindestens einen Server benennen, um ihn hinzuzufügen.",
+      "invalid_port_range": "Der Portbereich-Start muss kleiner oder gleich dem Portbereich-Ende sein."
+    },
+    "abort": {
+      "already_configured": "Dieser Server ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Minecraft Server Stats Optionen",
+        "data": {
+          "scan_interval": "Status-Aktualisierungsintervall (Sekunden)",
+          "discovery_interval": "Erkennungs-Scan-Intervall (Sekunden)",
+          "port_min": "Portbereich Start",
+          "port_max": "Portbereich Ende"
+        }
+      }
+    }
+  }
+}
+

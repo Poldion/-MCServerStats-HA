@@ -1,0 +1,11 @@
+{
+  "domain": "mc_server_stats",
+  "name": "Minecraft Server Stats",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/",
+  "iot_class": "local_polling",
+  "requirements": ["mcstatus>=11.1.1"],
+  "version": "1.0.0"
+}

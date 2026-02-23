@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add Minecraft Server",
+        "description": "Enter the IP address or hostname to scan for Minecraft servers.",
+        "data": {
+          "host": "IP address or hostname",
+          "scan_interval": "Status update interval (seconds)",
+          "discovery_interval": "Discovery scan interval (seconds)",
+          "port_min": "Port range start",
+          "port_max": "Port range end"
+        }
+      },
+      "select_servers": {
+        "title": "Configure Servers",
+        "description": "Found {count} server(s) on {host}. Give each server a name or clear the field to skip it.",
+        "data": {}
+      },
+      "discovery_confirm": {
+        "title": "New Minecraft Server discovered",
+        "description": "A new Minecraft server was found on {host}:{port}.",
+        "data": {
+          "server_name": "Server name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach any Minecraft server at the given address.",
+      "no_servers_selected": "You must name at least one server to add it.",
+      "invalid_port_range": "Port range start must be less than or equal to port range end."
+    },
+    "abort": {
+      "already_configured": "This server is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Minecraft Server Stats Options",
+        "data": {
+          "scan_interval": "Status update interval (seconds)",
+          "discovery_interval": "Discovery scan interval (seconds)",
+          "port_min": "Port range start",
+          "port_max": "Port range end"
+        }
+      }
+    }
+  }
+}
+
