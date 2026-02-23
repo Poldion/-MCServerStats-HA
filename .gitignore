@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build/temp
+_rebuild.py
+_rebuild_log.txt
+main.py
+_check_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+
