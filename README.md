@@ -28,7 +28,7 @@ A custom Home Assistant integration that monitors Minecraft Java servers, automa
 
 1. Open **HACS** in Home Assistant
 2. Click **⋮ (three dots)** → **Custom repositories**
-3. Add the repository URL: `https://github.com/JoshS/MCServerStats-HA`
+3. Add the repository URL: `https://github.com/Poldion/-MCServerStats-HA`
 4. Category: **Integration**
 5. Click **Add** → Find **"Minecraft Server Stats"** → **Download**
 6. **Restart Home Assistant**
