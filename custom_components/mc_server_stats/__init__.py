@@ -1,12 +1,14 @@
 """The Minecraft Server Stats integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from pathlib import Path
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
@@ -44,6 +46,24 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         ]
     )
 
+    # Schedule card resource registration after HA is fully started
+    # so Lovelace resources collection is guaranteed to be loaded.
+    async def _register_after_start(_event=None) -> None:
+        """Register card resource, retrying a few times if Lovelace isn't ready."""
+        for attempt in range(5):
+            try:
+                await _async_register_card_resource(hass)
+                return
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Card registration attempt %s failed, retrying…", attempt + 1
+                )
+                await asyncio.sleep(3)
+
+    if hass.is_running:
+        hass.async_create_task(_register_after_start())
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _register_after_start)
 
     return True
 
@@ -56,7 +76,19 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
             _LOGGER.debug("Lovelace not available, skipping auto-registration")
             return
 
-        resources = lovelace_data.get("resources")
+        # In modern HA, lovelace_data is an object – try subscript and attribute access
+        resources = None
+        if isinstance(lovelace_data, dict):
+            resources = lovelace_data.get("resources")
+        else:
+            # HA 2024.x+: lovelace_data may support subscript or attribute access
+            try:
+                resources = lovelace_data["resources"]
+            except (KeyError, TypeError):
+                pass
+            if resources is None:
+                resources = getattr(lovelace_data, "resources", None)
+
         if resources is None:
             _LOGGER.debug("Lovelace resources not available, skipping auto-registration")
             return
@@ -66,15 +98,21 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
             await resources.async_load()
 
         # Check if our URL is already registered
+        existing_items = []
         if hasattr(resources, "async_items"):
-            for item in resources.async_items():
-                stored_url = item.get("url", "")
-                if stored_url == CARD_URL:
-                    return  # Already registered
-                # Clean up old/wrong URLs from previous versions
-                if "mc-server-stats-card.js" in stored_url and stored_url != CARD_URL:
-                    await resources.async_delete_item(item["id"])
-                    _LOGGER.info("Removed outdated Lovelace resource: %s", stored_url)
+            existing_items = resources.async_items()
+        elif hasattr(resources, "data"):
+            # Fallback: some HA versions store items in .data
+            existing_items = resources.data.values() if isinstance(resources.data, dict) else resources.data
+
+        for item in existing_items:
+            stored_url = item.get("url", "")
+            if stored_url == CARD_URL:
+                return  # Already registered
+            # Clean up old/wrong URLs from previous versions
+            if "mc-server-stats-card.js" in stored_url and stored_url != CARD_URL:
+                await resources.async_delete_item(item["id"])
+                _LOGGER.info("Removed outdated Lovelace resource: %s", stored_url)
 
         # Add the resource
         await resources.async_create_item({"res_type": "module", "url": CARD_URL})
@@ -122,8 +160,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Start the background discovery scanner for this host (shared across entries)
     await _async_start_discovery(hass, host, discovery_interval, port_min, port_max)
 
-    # Auto-register the Lovelace card resource (once)
-    await _async_register_card_resource(hass)
 
     return True
 
