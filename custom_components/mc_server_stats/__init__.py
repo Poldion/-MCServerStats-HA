@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
@@ -26,6 +28,64 @@ from .coordinator import McDiscoveryCoordinator, McServerStatsCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 DISCOVERY_KEY = f"{DOMAIN}_discovery"
+
+CARD_STATIC_PATH = f"/hacsfiles/{DOMAIN}"
+CARD_URL = f"{CARD_STATIC_PATH}/mc-server-stats-card.js"
+CARD_DIR = Path(__file__).parent / "www"
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register the custom card resource."""
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                CARD_STATIC_PATH,
+                str(CARD_DIR),
+                cache_headers=False,
+            )
+        ]
+    )
+    return True
+
+
+async def _async_register_card_resource(hass: HomeAssistant) -> None:
+    """Automatically add the card JS as a Lovelace resource if not already present."""
+    try:
+        lovelace_data = hass.data.get("lovelace")
+        if lovelace_data is None:
+            _LOGGER.debug("Lovelace not available, skipping auto-registration")
+            return
+
+        resources = lovelace_data.get("resources")
+        if resources is None:
+            _LOGGER.debug("Lovelace resources not available, skipping auto-registration")
+            return
+
+        # Make sure the collection is loaded
+        if hasattr(resources, "loaded") and not resources.loaded:
+            await resources.async_load()
+
+        # Check if our URL is already registered
+        if hasattr(resources, "async_items"):
+            for item in resources.async_items():
+                stored_url = item.get("url", "")
+                if stored_url == CARD_URL:
+                    return  # Already registered
+                # Clean up old/wrong URLs from previous versions
+                if "mc-server-stats-card.js" in stored_url and stored_url != CARD_URL:
+                    await resources.async_delete_item(item["id"])
+                    _LOGGER.info("Removed outdated Lovelace resource: %s", stored_url)
+
+        # Add the resource
+        await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+        _LOGGER.info("Registered Lovelace resource: %s", CARD_URL)
+    except Exception as err:
+        _LOGGER.debug(
+            "Could not auto-register Lovelace resource (%s). "
+            "You may need to add it manually: %s",
+            err,
+            CARD_URL,
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -61,6 +121,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Start the background discovery scanner for this host (shared across entries)
     await _async_start_discovery(hass, host, discovery_interval, port_min, port_max)
+
+    # Auto-register the Lovelace card resource (once)
+    await _async_register_card_resource(hass)
 
     return True
 

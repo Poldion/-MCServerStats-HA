@@ -87,8 +87,11 @@ class McServerStatsCoordinator(DataUpdateCoordinator[McServerData]):
             status = await server.async_status()
 
             motd_text = ""
-            if hasattr(status, "motd"):
-                motd_text = _strip_formatting(str(status.motd))
+            if hasattr(status, "motd") and status.motd is not None:
+                if hasattr(status.motd, "to_plain"):
+                    motd_text = _strip_formatting(status.motd.to_plain())
+                else:
+                    motd_text = _strip_formatting(str(status.motd))
             elif hasattr(status, "description"):
                 motd_text = _strip_formatting(str(status.description))
 
