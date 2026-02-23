@@ -35,7 +35,7 @@ CARD_DIR = Path(__file__).parent / "www"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register the custom card resource and brand icons."""
+    """Register the custom card resource."""
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
@@ -44,9 +44,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         ]
     )
 
-    # Register brand icon views so HA frontend can find our icons
-    from .brand import register_icon_views
-    register_icon_views(hass)
 
     return True
 
