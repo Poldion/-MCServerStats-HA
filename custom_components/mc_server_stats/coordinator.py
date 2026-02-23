@@ -27,6 +27,9 @@ class McServerData:
     version: str = ""
     latency: float = 0.0
     player_list: list[str] = field(default_factory=list)
+    modded: bool = False
+    mod_count: int = 0
+    mod_list: list[dict[str, str]] = field(default_factory=list)
 
 
 def _strip_formatting(text: str) -> str:
@@ -93,6 +96,18 @@ class McServerStatsCoordinator(DataUpdateCoordinator[McServerData]):
             if status.players and status.players.sample:
                 player_names = [p.name for p in status.players.sample]
 
+            # Extract Forge mod data if available
+            modded = False
+            mod_count = 0
+            mod_list: list[dict[str, str]] = []
+            if hasattr(status, "forge_data") and status.forge_data is not None:
+                modded = True
+                mod_list = [
+                    {"id": mod.name, "version": mod.marker}
+                    for mod in status.forge_data.mods
+                ]
+                mod_count = len(mod_list)
+
             return McServerData(
                 online=True,
                 players_online=status.players.online if status.players else 0,
@@ -101,6 +116,9 @@ class McServerStatsCoordinator(DataUpdateCoordinator[McServerData]):
                 version=status.version.name if status.version else "Unknown",
                 latency=round(status.latency, 2),
                 player_list=player_names,
+                modded=modded,
+                mod_count=mod_count,
+                mod_list=mod_list,
             )
         except Exception:
             return McServerData(online=False)

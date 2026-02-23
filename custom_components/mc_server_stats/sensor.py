@@ -30,6 +30,7 @@ async def async_setup_entry(
             McServerMotdSensor(coordinator, host, port, custom_name),
             McServerVersionSensor(coordinator, host, port, custom_name),
             McServerLatencySensor(coordinator, host, port, custom_name),
+            McServerModsSensor(coordinator, host, port, custom_name),
         ],
         update_before_add=True,
     )
@@ -55,10 +56,8 @@ class McServerSensorBase(CoordinatorEntity[McServerStatsCoordinator], SensorEnti
         self._port = port
         self._sensor_type = sensor_type
 
-        display_name = custom_name or f"{host}:{port}"
-
         self._attr_unique_id = f"{host}_{port}_{sensor_type}"
-        self._attr_name = f"{display_name} {name_suffix}"
+        self._attr_name = name_suffix
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{host}:{port}")},
             name=custom_name or f"Minecraft Server {host}:{port}",
@@ -134,4 +133,28 @@ class McServerLatencySensor(McServerSensorBase):
     @property
     def native_value(self):
         return self._server_data.latency
+
+
+class McServerModsSensor(McServerSensorBase):
+    """Sensor showing whether the server is modded and the mod list."""
+
+    _attr_icon = "mdi:puzzle"
+
+    def __init__(self, coordinator, host, port, custom_name=None):
+        super().__init__(coordinator, host, port, "mods", "Mods", custom_name)
+
+    @property
+    def native_value(self):
+        if self._server_data.modded:
+            return self._server_data.mod_count
+        return "Vanilla"
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "modded": self._server_data.modded,
+            "mod_count": self._server_data.mod_count,
+            "mod_list": self._server_data.mod_list,
+        }
+
 

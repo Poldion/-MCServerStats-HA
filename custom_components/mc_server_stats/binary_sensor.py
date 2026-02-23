@@ -46,10 +46,8 @@ class McServerOnlineBinarySensor(
         self._host = host
         self._port = port
 
-        display_name = custom_name or f"{host}:{port}"
-
         self._attr_unique_id = f"{host}_{port}_online"
-        self._attr_name = f"{display_name} Status"
+        self._attr_name = "Status"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{host}:{port}")},
             name=custom_name or f"Minecraft Server {host}:{port}",
