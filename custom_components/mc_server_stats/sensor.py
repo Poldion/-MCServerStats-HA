@@ -80,7 +80,7 @@ class McServerPlayersSensor(McServerSensorBase):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, host, port, custom_name=None):
-        super().__init__(coordinator, host, port, "players_online", "Spieler", custom_name)
+        super().__init__(coordinator, host, port, "players_online", "Players", custom_name)
 
     @property
     def native_value(self):
@@ -128,7 +128,7 @@ class McServerLatencySensor(McServerSensorBase):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, host, port, custom_name=None):
-        super().__init__(coordinator, host, port, "latency", "Latenz", custom_name)
+        super().__init__(coordinator, host, port, "latency", "Latency", custom_name)
 
     @property
     def native_value(self):
