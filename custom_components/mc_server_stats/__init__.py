@@ -32,7 +32,8 @@ _LOGGER = logging.getLogger(__name__)
 DISCOVERY_KEY = f"{DOMAIN}_discovery"
 
 CARD_STATIC_PATH = f"/hacsfiles/{DOMAIN}"
-CARD_URL = f"{CARD_STATIC_PATH}/mc-server-stats-card.js"
+CARD_JS = "mc-server-stats-card.js"
+CARD_URL = f"{CARD_STATIC_PATH}/{CARD_JS}"
 CARD_DIR = Path(__file__).parent / "www"
 
 
@@ -73,7 +74,11 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
     try:
         lovelace_data = hass.data.get("lovelace")
         if lovelace_data is None:
-            _LOGGER.debug("Lovelace not available, skipping auto-registration")
+            _LOGGER.warning(
+                "Lovelace not available – cannot auto-register card resource. "
+                "Please add %s manually as a Lovelace resource.",
+                CARD_URL,
+            )
             return
 
         # In modern HA, lovelace_data is an object – try subscript and attribute access
@@ -90,7 +95,11 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
                 resources = getattr(lovelace_data, "resources", None)
 
         if resources is None:
-            _LOGGER.debug("Lovelace resources not available, skipping auto-registration")
+            _LOGGER.warning(
+                "Lovelace resources not available – cannot auto-register card. "
+                "Please add %s manually as a Lovelace resource.",
+                CARD_URL,
+            )
             return
 
         # Make sure the collection is loaded
@@ -100,27 +109,37 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
         # Check if our URL is already registered
         existing_items = []
         if hasattr(resources, "async_items"):
-            existing_items = resources.async_items()
+            existing_items = list(resources.async_items())
         elif hasattr(resources, "data"):
             # Fallback: some HA versions store items in .data
-            existing_items = resources.data.values() if isinstance(resources.data, dict) else resources.data
+            existing_items = list(
+                resources.data.values() if isinstance(resources.data, dict) else resources.data
+            )
 
         for item in existing_items:
             stored_url = item.get("url", "")
-            if stored_url == CARD_URL:
+            # Match on the JS filename (ignore query params, path variations)
+            if stored_url == CARD_URL or stored_url.startswith(CARD_URL + "?"):
+                _LOGGER.debug("Lovelace resource already registered: %s", stored_url)
                 return  # Already registered
             # Clean up old/wrong URLs from previous versions
-            if "mc-server-stats-card.js" in stored_url and stored_url != CARD_URL:
-                await resources.async_delete_item(item["id"])
-                _LOGGER.info("Removed outdated Lovelace resource: %s", stored_url)
+            if CARD_JS in stored_url and not stored_url.startswith(CARD_URL):
+                try:
+                    await resources.async_delete_item(item["id"])
+                    _LOGGER.info("Removed outdated Lovelace resource: %s", stored_url)
+                except Exception:  # noqa: BLE001
+                    pass
 
-        # Add the resource
-        await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+        # Add the resource – try modern field name "type" first, fall back to "res_type"
+        try:
+            await resources.async_create_item({"type": "module", "url": CARD_URL})
+        except (TypeError, ValueError, KeyError):
+            await resources.async_create_item({"res_type": "module", "url": CARD_URL})
         _LOGGER.info("Registered Lovelace resource: %s", CARD_URL)
     except Exception as err:
-        _LOGGER.debug(
+        _LOGGER.warning(
             "Could not auto-register Lovelace resource (%s). "
-            "You may need to add it manually: %s",
+            "Please add %s manually as a dashboard resource (type: module).",
             err,
             CARD_URL,
         )
