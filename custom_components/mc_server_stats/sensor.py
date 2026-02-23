@@ -26,12 +26,10 @@ async def async_setup_entry(
 
     async_add_entities(
         [
-            McServerPlayerCountSensor(coordinator, host, port, custom_name),
-            McServerMaxPlayersSensor(coordinator, host, port, custom_name),
+            McServerPlayersSensor(coordinator, host, port, custom_name),
             McServerMotdSensor(coordinator, host, port, custom_name),
             McServerVersionSensor(coordinator, host, port, custom_name),
             McServerLatencySensor(coordinator, host, port, custom_name),
-            McServerPlayerListSensor(coordinator, host, port, custom_name),
         ],
         update_before_add=True,
     )
@@ -76,14 +74,14 @@ class McServerSensorBase(CoordinatorEntity[McServerStatsCoordinator], SensorEnti
         return McServerData()
 
 
-class McServerPlayerCountSensor(McServerSensorBase):
-    """Sensor for the current player count."""
+class McServerPlayersSensor(McServerSensorBase):
+    """Sensor for the current player count, max players, and player list."""
 
     _attr_icon = "mdi:account-group"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, host, port, custom_name=None):
-        super().__init__(coordinator, host, port, "players_online", "Spieler Online", custom_name)
+        super().__init__(coordinator, host, port, "players_online", "Spieler", custom_name)
 
     @property
     def native_value(self):
@@ -91,20 +89,10 @@ class McServerPlayerCountSensor(McServerSensorBase):
 
     @property
     def extra_state_attributes(self):
-        return {"max_players": self._server_data.players_max}
-
-
-class McServerMaxPlayersSensor(McServerSensorBase):
-    """Sensor for the max player count."""
-
-    _attr_icon = "mdi:account-group-outline"
-
-    def __init__(self, coordinator, host, port, custom_name=None):
-        super().__init__(coordinator, host, port, "players_max", "Max Spieler", custom_name)
-
-    @property
-    def native_value(self):
-        return self._server_data.players_max
+        return {
+            "max_players": self._server_data.players_max,
+            "player_names": self._server_data.player_list,
+        }
 
 
 class McServerMotdSensor(McServerSensorBase):
@@ -146,21 +134,4 @@ class McServerLatencySensor(McServerSensorBase):
     @property
     def native_value(self):
         return self._server_data.latency
-
-
-class McServerPlayerListSensor(McServerSensorBase):
-    """Sensor that exposes the list of online players."""
-
-    _attr_icon = "mdi:format-list-bulleted"
-
-    def __init__(self, coordinator, host, port, custom_name=None):
-        super().__init__(coordinator, host, port, "player_list", "Spielerliste", custom_name)
-
-    @property
-    def native_value(self):
-        return len(self._server_data.player_list)
-
-    @property
-    def extra_state_attributes(self):
-        return {"player_names": self._server_data.player_list}
 
