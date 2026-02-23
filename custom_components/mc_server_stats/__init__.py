@@ -32,25 +32,22 @@ DISCOVERY_KEY = f"{DOMAIN}_discovery"
 CARD_STATIC_PATH = f"/hacsfiles/{DOMAIN}"
 CARD_URL = f"{CARD_STATIC_PATH}/mc-server-stats-card.js"
 CARD_DIR = Path(__file__).parent / "www"
-ICON_DIR = Path(__file__).parent / "brand"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Register the custom card resource and brand icons."""
-    brand_path = str(ICON_DIR)
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
                 CARD_STATIC_PATH, str(CARD_DIR), cache_headers=False
             ),
-            StaticPathConfig(
-                f"/brands/{DOMAIN}", brand_path, cache_headers=False
-            ),
-            StaticPathConfig(
-                f"/brands/_/{DOMAIN}", brand_path, cache_headers=False
-            ),
         ]
     )
+
+    # Register brand icon views so HA frontend can find our icons
+    from .brand import register_icon_views
+    register_icon_views(hass)
+
     return True
 
 
