@@ -52,70 +52,26 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
     """Add the card JS as a Lovelace dashboard resource so it appears in the card picker."""
     if hass.data.get(CARD_REGISTERED_KEY):
-        return  # Already done this session
+        return
 
     try:
         lovelace = hass.data.get("lovelace")
         if lovelace is None:
-            _LOGGER.warning("MC-Stats card registration: hass.data['lovelace'] is None")
             return
 
-        _LOGGER.warning(
-            "MC-Stats card registration: lovelace type=%s, dir=%s",
-            type(lovelace).__name__,
-            [a for a in dir(lovelace) if not a.startswith("_")],
-        )
-
-        # HA 2024+: lovelace is a LovelaceData object, access via subscript
-        resources = None
-        try:
-            resources = lovelace["resources"]
-        except (KeyError, TypeError) as exc:
-            _LOGGER.warning("MC-Stats card registration: subscript access failed: %s", exc)
-
+        # HA 2026+: LovelaceData is not subscriptable – use attribute access
+        resources = getattr(lovelace, "resources", None)
         if resources is None:
-            resources = getattr(lovelace, "resources", None)
-            if resources is not None:
-                _LOGGER.warning("MC-Stats card registration: got resources via getattr")
-
-        if resources is None:
-            _LOGGER.warning(
-                "MC-Stats card registration: resources is None. "
-                "lovelace keys (if dict): %s",
-                list(lovelace.keys()) if hasattr(lovelace, "keys") else "N/A",
-            )
             return
-
-        _LOGGER.warning(
-            "MC-Stats card registration: resources type=%s, dir=%s",
-            type(resources).__name__,
-            [a for a in dir(resources) if not a.startswith("_")],
-        )
 
         # Ensure the collection is loaded
-        if hasattr(resources, "loaded"):
-            _LOGGER.warning("MC-Stats card registration: resources.loaded=%s", resources.loaded)
-            if not resources.loaded:
-                await resources.async_load()
-                _LOGGER.warning("MC-Stats card registration: async_load() done")
-        elif hasattr(resources, "async_load"):
+        if hasattr(resources, "loaded") and not resources.loaded:
             await resources.async_load()
-            _LOGGER.warning("MC-Stats card registration: async_load() done (no .loaded attr)")
-
-        # Gather existing items
-        items = []
-        if hasattr(resources, "async_items"):
-            items = list(resources.async_items())
-            _LOGGER.warning("MC-Stats card registration: found %d existing items", len(items))
-        else:
-            _LOGGER.warning("MC-Stats card registration: no async_items method")
 
         # Check if already registered
-        for item in items:
+        for item in resources.async_items():
             url = item.get("url", "")
-            _LOGGER.debug("MC-Stats card registration: existing resource url=%s", url)
             if CARD_JS in url and CARD_STATIC_PATH in url:
-                _LOGGER.warning("MC-Stats card registration: already registered: %s", url)
                 hass.data[CARD_REGISTERED_KEY] = True
                 return
             # Remove stale entries with the card filename but wrong path
@@ -126,17 +82,15 @@ async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
                 except Exception:  # noqa: BLE001
                     pass
 
-        # Create the resource – HA uses "res_type" in the storage schema
-        _LOGGER.warning("MC-Stats card registration: creating item with url=%s", CARD_URL)
+        # Create the resource
         await resources.async_create_item({"res_type": "module", "url": CARD_URL})
         hass.data[CARD_REGISTERED_KEY] = True
-        _LOGGER.warning("MC-Stats card registration: SUCCESS – registered %s", CARD_URL)
+        _LOGGER.info("Auto-registered Lovelace resource: %s", CARD_URL)
 
     except Exception as exc:  # noqa: BLE001
         _LOGGER.warning(
-            "MC-Stats card registration FAILED: %s: %s. "
+            "Could not auto-register Lovelace resource (%s). "
             "Please add '%s' manually under Settings → Dashboards → Resources (type: JavaScript Module).",
-            type(exc).__name__,
             exc,
             CARD_URL,
         )

@@ -1,5 +1,19 @@
 const CARD_VERSION = "1.3.0";
 
+// Register the card in the picker as early as possible
+window.customCards = window.customCards || [];
+if (!window.customCards.some((c) => c.type === "mc-server-stats-card")) {
+  window.customCards.push({
+    type: "mc-server-stats-card",
+    name: "Minecraft Server Stats",
+    description:
+      "Automatically displays all Minecraft servers and rotates between active ones.",
+    preview: true,
+    documentationURL:
+      "https://github.com/Poldion/-MCServerStats-HA",
+  });
+}
+
 class McServerStatsCard extends HTMLElement {
   static get properties() {
     return { hass: {}, config: {} };
@@ -548,13 +562,6 @@ class McServerStatsCardEditor extends HTMLElement {
 
 customElements.define("mc-server-stats-card-editor", McServerStatsCardEditor);
 
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "mc-server-stats-card",
-  name: "Minecraft Server Stats",
-  description: "Automatically displays all Minecraft servers and rotates between active ones.",
-  preview: true,
-});
 
 console.info(
   `%c MC-SERVER-STATS-CARD %c v${CARD_VERSION} `,
