@@ -5,7 +5,6 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 
-from homeassistant.components.frontend import async_register_extra_module_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -29,6 +28,7 @@ from .coordinator import McDiscoveryCoordinator, McServerStatsCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 DISCOVERY_KEY = f"{DOMAIN}_discovery"
+CARD_REGISTERED_KEY = f"{DOMAIN}_card_registered"
 
 CARD_STATIC_PATH = f"/hacsfiles/{DOMAIN}"
 CARD_JS = "mc-server-stats-card.js"
@@ -37,7 +37,7 @@ CARD_DIR = Path(__file__).parent / "www"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register the custom card as a frontend module."""
+    """Serve the custom card JS file via HTTP."""
     # Serve the www/ folder under /hacsfiles/mc_server_stats/
     await hass.http.async_register_static_paths(
         [
@@ -46,14 +46,100 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             ),
         ]
     )
-
-    # Inject the card JS into every Lovelace dashboard automatically.
-    # This bypasses the Lovelace resources storage entirely – no manual
-    # "Add resource" step is needed.
-    async_register_extra_module_url(hass, CARD_URL)
-    _LOGGER.debug("Registered frontend extra module: %s", CARD_URL)
-
     return True
+
+
+async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
+    """Add the card JS as a Lovelace dashboard resource so it appears in the card picker."""
+    if hass.data.get(CARD_REGISTERED_KEY):
+        return  # Already done this session
+
+    try:
+        lovelace = hass.data.get("lovelace")
+        if lovelace is None:
+            _LOGGER.warning("MC-Stats card registration: hass.data['lovelace'] is None")
+            return
+
+        _LOGGER.warning(
+            "MC-Stats card registration: lovelace type=%s, dir=%s",
+            type(lovelace).__name__,
+            [a for a in dir(lovelace) if not a.startswith("_")],
+        )
+
+        # HA 2024+: lovelace is a LovelaceData object, access via subscript
+        resources = None
+        try:
+            resources = lovelace["resources"]
+        except (KeyError, TypeError) as exc:
+            _LOGGER.warning("MC-Stats card registration: subscript access failed: %s", exc)
+
+        if resources is None:
+            resources = getattr(lovelace, "resources", None)
+            if resources is not None:
+                _LOGGER.warning("MC-Stats card registration: got resources via getattr")
+
+        if resources is None:
+            _LOGGER.warning(
+                "MC-Stats card registration: resources is None. "
+                "lovelace keys (if dict): %s",
+                list(lovelace.keys()) if hasattr(lovelace, "keys") else "N/A",
+            )
+            return
+
+        _LOGGER.warning(
+            "MC-Stats card registration: resources type=%s, dir=%s",
+            type(resources).__name__,
+            [a for a in dir(resources) if not a.startswith("_")],
+        )
+
+        # Ensure the collection is loaded
+        if hasattr(resources, "loaded"):
+            _LOGGER.warning("MC-Stats card registration: resources.loaded=%s", resources.loaded)
+            if not resources.loaded:
+                await resources.async_load()
+                _LOGGER.warning("MC-Stats card registration: async_load() done")
+        elif hasattr(resources, "async_load"):
+            await resources.async_load()
+            _LOGGER.warning("MC-Stats card registration: async_load() done (no .loaded attr)")
+
+        # Gather existing items
+        items = []
+        if hasattr(resources, "async_items"):
+            items = list(resources.async_items())
+            _LOGGER.warning("MC-Stats card registration: found %d existing items", len(items))
+        else:
+            _LOGGER.warning("MC-Stats card registration: no async_items method")
+
+        # Check if already registered
+        for item in items:
+            url = item.get("url", "")
+            _LOGGER.debug("MC-Stats card registration: existing resource url=%s", url)
+            if CARD_JS in url and CARD_STATIC_PATH in url:
+                _LOGGER.warning("MC-Stats card registration: already registered: %s", url)
+                hass.data[CARD_REGISTERED_KEY] = True
+                return
+            # Remove stale entries with the card filename but wrong path
+            if CARD_JS in url and CARD_STATIC_PATH not in url:
+                try:
+                    await resources.async_delete_item(item["id"])
+                    _LOGGER.info("Removed stale card resource: %s", url)
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # Create the resource – HA uses "res_type" in the storage schema
+        _LOGGER.warning("MC-Stats card registration: creating item with url=%s", CARD_URL)
+        await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+        hass.data[CARD_REGISTERED_KEY] = True
+        _LOGGER.warning("MC-Stats card registration: SUCCESS – registered %s", CARD_URL)
+
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning(
+            "MC-Stats card registration FAILED: %s: %s. "
+            "Please add '%s' manually under Settings → Dashboards → Resources (type: JavaScript Module).",
+            type(exc).__name__,
+            exc,
+            CARD_URL,
+        )
 
 
 
@@ -91,6 +177,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Start the background discovery scanner for this host (shared across entries)
     await _async_start_discovery(hass, host, discovery_interval, port_min, port_max)
 
+    # Register the Lovelace card resource (once per HA session)
+    await _async_register_lovelace_resource(hass)
 
     return True
 

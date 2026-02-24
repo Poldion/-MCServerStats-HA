@@ -3,7 +3,7 @@
   "name": "Minecraft Server Stats",
   "codeowners": ["@Poldion"],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "lovelace"],
+  "dependencies": ["http", "lovelace"],
   "documentation": "https://github.com/Poldion/-MCServerStats-HA",
   "issue_tracker": "https://github.com/Poldion/-MCServerStats-HA/issues",
   "iot_class": "local_polling",
