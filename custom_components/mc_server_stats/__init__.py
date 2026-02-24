@@ -1,15 +1,14 @@
 """The Minecraft Server Stats integration."""
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HassJob, HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
 
 from .const import (
     CONF_DISCOVERY_INTERVAL,
@@ -37,6 +36,11 @@ CARD_JS = "mc-server-stats-card.js"
 CARD_URL = f"{CARD_STATIC_PATH}/{CARD_JS}"
 CARD_DIR = Path(__file__).parent / "www"
 
+RESOURCE_STARTUP_DELAY = 5
+RESOURCE_RETRY_DELAY = 30
+RESOURCE_MAX_RETRIES = 3
+RESOURCE_RETRY_KEY = f"{DOMAIN}_card_register_retries"
+
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Serve the custom card JS file via HTTP."""
@@ -48,6 +52,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             ),
         ]
     )
+    hass.async_create_task(_async_register_lovelace_resource(hass))
     return True
 
 
@@ -56,94 +61,71 @@ async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
     if hass.data.get(CARD_REGISTERED_KEY):
         return
 
-    async def _do_register() -> bool:
-        """Attempt to register the resource. Returns True on success."""
-        try:
-            lovelace = hass.data.get("lovelace")
-            if lovelace is None:
-                _LOGGER.debug("Lovelace data not available yet")
-                return False
+    def _schedule_retry(delay: int, *, increment: bool = True) -> None:
+        if hass.data.get(CARD_REGISTERED_KEY):
+            return
+        retries = hass.data.get(RESOURCE_RETRY_KEY, 0)
+        if increment:
+            if retries >= RESOURCE_MAX_RETRIES:
+                _LOGGER.warning(
+                    "Could not auto-register Lovelace resource. "
+                    "Please add '%s' manually under Settings → Dashboards → Resources (type: JavaScript Module).",
+                    CARD_URL,
+                )
+                return
+            hass.data[RESOURCE_RETRY_KEY] = retries + 1
 
-            # HA 2026+: LovelaceData is not subscriptable – use attribute access
-            resources = getattr(lovelace, "resources", None)
-            if resources is None:
-                _LOGGER.debug("Lovelace resources not available")
-                return False
-
-            # Ensure the collection is loaded
-            if hasattr(resources, "loaded") and not resources.loaded:
-                await resources.async_load()
-            elif hasattr(resources, "async_get_info"):
-                await resources.async_get_info()
-
-            # Check if already registered
-            items = []
-            if hasattr(resources, "async_items"):
-                items = list(resources.async_items())
-            elif hasattr(resources, "data"):
-                items = list(resources.data.values()) if isinstance(resources.data, dict) else list(resources.data)
-
-            for item in items:
-                url = item.get("url", "") if isinstance(item, dict) else getattr(item, "url", "")
-                item_id = item.get("id", "") if isinstance(item, dict) else getattr(item, "id", "")
-                if CARD_JS in url and CARD_STATIC_PATH in url:
-                    hass.data[CARD_REGISTERED_KEY] = True
-                    _LOGGER.debug("Lovelace resource already registered: %s", url)
-                    return True
-                # Remove stale entries with the card filename but wrong path
-                if CARD_JS in url and CARD_STATIC_PATH not in url:
-                    try:
-                        await resources.async_delete_item(item_id)
-                        _LOGGER.info("Removed stale card resource: %s", url)
-                    except Exception:  # noqa: BLE001
-                        pass
-
-            # Create the resource
-            await resources.async_create_item({"res_type": "module", "url": CARD_URL})
-            hass.data[CARD_REGISTERED_KEY] = True
-            _LOGGER.info("Auto-registered Lovelace resource: %s", CARD_URL)
-            return True
-
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("Lovelace resource registration attempt failed: %s", exc)
-            return False
-
-    # Try immediately
-    if await _do_register():
-        return
-
-    # If HA is still starting, schedule retry after startup
-    if not hass.is_running:
         @callback
-        def _on_homeassistant_started(_event) -> None:
-            """Retry registration after HA has fully started."""
-            hass.async_create_task(_delayed_register())
+        def _retry(_now: datetime) -> None:
+            hass.async_create_task(_async_register_lovelace_resource(hass))
 
-        async def _delayed_register() -> None:
-            """Wait a bit and retry registration."""
-            await asyncio.sleep(5)
-            if not await _do_register():
-                _LOGGER.warning(
-                    "Could not auto-register Lovelace resource. "
-                    "Please add '%s' manually under Settings → Dashboards → Resources (type: JavaScript Module).",
-                    CARD_URL,
-                )
+        async_call_later(hass, delay, HassJob(_retry))
 
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_homeassistant_started)
-        _LOGGER.debug("Scheduled Lovelace resource registration for after HA startup")
-    else:
-        # HA is running but Lovelace not ready - try once more after delay
-        async def _retry_register() -> None:
-            await asyncio.sleep(5)
-            if not await _do_register():
-                _LOGGER.warning(
-                    "Could not auto-register Lovelace resource. "
-                    "Please add '%s' manually under Settings → Dashboards → Resources (type: JavaScript Module).",
-                    CARD_URL,
-                )
+    try:
+        lovelace = hass.data.get("lovelace")
+        resources = getattr(lovelace, "resources", None) if lovelace else None
+        if resources is None:
+            _LOGGER.debug("Lovelace resources not available yet")
+            _schedule_retry(RESOURCE_RETRY_DELAY)
+            return
 
-        hass.async_create_task(_retry_register())
+        # Ensure the collection is loaded
+        if hasattr(resources, "loaded") and not resources.loaded:
+            await resources.async_load()
+        elif hasattr(resources, "async_get_info"):
+            await resources.async_get_info()
 
+        # Check if already registered (and clean up stale entries)
+        items = []
+        if hasattr(resources, "async_items"):
+            items = list(resources.async_items())
+        elif hasattr(resources, "data"):
+            items = list(resources.data.values()) if isinstance(resources.data, dict) else list(resources.data)
+
+        for item in items:
+            url = item.get("url", "") if isinstance(item, dict) else getattr(item, "url", "")
+            item_id = item.get("id", "") if isinstance(item, dict) else getattr(item, "id", "")
+            if url == CARD_URL:
+                hass.data[CARD_REGISTERED_KEY] = True
+                hass.data.pop(RESOURCE_RETRY_KEY, None)
+                _LOGGER.debug("Lovelace resource already registered: %s", url)
+                return
+            if CARD_JS in url and url != CARD_URL:
+                try:
+                    await resources.async_delete_item(item_id)
+                    _LOGGER.info("Removed stale card resource: %s", url)
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # Create the resource
+        await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+        hass.data[CARD_REGISTERED_KEY] = True
+        hass.data.pop(RESOURCE_RETRY_KEY, None)
+        _LOGGER.info("Auto-registered Lovelace resource: %s", CARD_URL)
+
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Lovelace resource registration attempt failed: %s", exc)
+        _schedule_retry(RESOURCE_RETRY_DELAY)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -179,9 +161,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Start the background discovery scanner for this host (shared across entries)
     await _async_start_discovery(hass, host, discovery_interval, port_min, port_max)
-
-    # Register the Lovelace card resource (once per HA session)
-    await _async_register_lovelace_resource(hass)
 
     return True
 
